@@ -28,7 +28,7 @@ def extract_time_block(min_t, max_t, table):
     return table.query("date>=@min_t & date<=@max_t")
 
 
-def batter_power(delta_freq, service_power):
+def battery_power(delta_freq, service_power):
     
     max_percent = 4.0 / service_power
     min_percent = -5.0 / service_power
@@ -76,9 +76,9 @@ def add_charge_info(df, service_power):
     return df
 
 
-def read_and_clean():
+def read_and_clean(path='data/task_data_1hz.tar.gz'):
     
-    freq_table = pd.read_csv("task_data_1hz.csv")
+    freq_table = pd.read_csv(path, compression='gzip')
     freq_table = freq_table.rename(
         {
             "datetime": "date",
