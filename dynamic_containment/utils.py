@@ -12,12 +12,20 @@ warnings.filterwarnings('ignore')
 from tqdm.notebook import tqdm
 
 
-def hist_fit(x, bin_cents, hist):
+def hist_fit_2gauss(x, bin_cents, hist):
     
     gauss1 = normal_dist(bin_cents, x[1], mu=-x[0])
     gauss2 = normal_dist(bin_cents, x[1], mu=x[0])
     
     gauss = np.where(bin_cents<0, gauss1, gauss2)
+    gauss = gauss / np.trapz(gauss, bin_cents)
+    
+    return gauss-hist
+
+
+def hist_fit_gauss(x, bin_cents, hist):
+    
+    gauss = normal_dist(bin_cents, x[1], mu=x[0])
     gauss = gauss / np.trapz(gauss, bin_cents)
     
     return gauss-hist
@@ -67,9 +75,11 @@ def battery_power(delta_freq, service_power):
     return battery_charge
 
 
-def add_charge_info(df, service_power):
+def add_charge_info(input_df, service_power):
+
+    df = input_df.copy()
     
-    df["battery_charge_percent"] = [batter_power(dfi, service_power) for dfi in df["delta_freq"]]
+    df["battery_charge_percent"] = [battery_power(dfi, service_power) for dfi in df["delta_freq"]]
     df["battery_charge"] = service_power * df["battery_charge_percent"]
     df['culm_charge'] = df["battery_charge"].cumsum()/3600.0
     
@@ -98,9 +108,9 @@ def spectral_power(df, fs=1):
     return x, power
 
 
-def simulate_delta_f(df):
+def simulate_delta_f(delta_f):
     
-    x, power = spectral_power(df, fs=1)
+    x, power = spectral_power(delta_f, fs=1)
     
     # Create the frequency grid:
     fmin = x[0]
@@ -128,7 +138,9 @@ def simulate_delta_f(df):
     return process
 
 
-def fill_in_spectra(df, sim):
+def fill_in_spectra(input_df, sim):
+
+    df = input_df.copy()
     
     sim = sim.rename({'delta_freq': 'sim_delta_freq'}, axis=1).drop('date', axis=1)
     
@@ -151,7 +163,7 @@ def normal_dist(x, sigma, mu=0):
 def calc_gaussian_slope(sigma, service_power):
     
     delta_freq = np.linspace(-1.5, 1.5, num=200)
-    y = np.array([batter_power(deltaf, service_power) for deltaf in delta_freq])
+    y = np.array([battery_power(deltaf, service_power) for deltaf in delta_freq])
     
     charge = np.trapz(
         (
@@ -166,7 +178,7 @@ def calc_gaussian_slope(sigma, service_power):
 def calc_fitted_slope(pdf, bin_cents, service_power):
     
     delta_freq = bin_cents#np.linspace(-1.5, 1.5, num=2000)
-    y = np.array([batter_power(deltaf, service_power) for deltaf in delta_freq])
+    y = np.array([battery_power(deltaf, service_power) for deltaf in delta_freq])
     
     interped_pdf = interp1d(bin_cents, pdf, fill_value='extrapolate',  kind='linear')
     
@@ -180,13 +192,15 @@ def calc_fitted_slope(pdf, bin_cents, service_power):
     return charge * service_power / 3600
 
 
-def calc_data_slope(df, service_power, bins=200):
+def calc_data_slope(input_df, service_power, bins=200):
+
+    df = input_df.copy()
     
     p, x = np.histogram(df["delta_freq"], bins=bins, density=True)
     
     delta_freq = 0.5 * (x[1:] + x[:-1])
     
-    y = np.array([batter_power(deltaf, service_power) for deltaf in delta_freq])
+    y = np.array([battery_power(deltaf, service_power) for deltaf in delta_freq])
     
     charge = np.trapz(
         (
@@ -212,7 +226,9 @@ def generate_sample_df(pdf, bin_cents, num_samps):
     return our_samps
 
 
-def temporal_covariance(df, max_sep=None, step=100):
+def temporal_covariance(input_df, max_sep=None, step=100):
+
+    df = input_df.copy()
     
     cov_work = df[["delta_freq"]]
     
