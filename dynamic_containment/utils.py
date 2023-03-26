@@ -76,9 +76,9 @@ def add_charge_info(df, service_power):
     return df
 
 
-def read_and_clean(path='data/task_data_1hz.tar.gz'):
+def read_and_clean(path='data/task_data_1hz.csv.gz'):
     
-    freq_table = pd.read_csv(path, compression='gzip')
+    freq_table = pd.read_csv(path)
     freq_table = freq_table.rename(
         {
             "datetime": "date",
