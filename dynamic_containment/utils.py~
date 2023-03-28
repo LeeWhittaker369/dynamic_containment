@@ -36,16 +36,18 @@ def extract_time_block(min_t, max_t, table):
     return table.query("date>=@min_t & date<=@max_t")
 
 
-def battery_power(delta_freq, service_power, max_discharge_rate=5, max_charge_rate=4, charge_efficiency=0.9, max_cap=4):
+def battery_power(delta_freq, service_power):
     
-    max_percent = max_charge_rate / service_power
-    min_percent = -max_discharge_rate / service_power
+    max_percent = 4.0 / service_power
+    min_percent = -5.0 / service_power
     
     if max_percent > 1.0:
         max_percent = 1.0
     if min_percent < -1.0:
         min_percent = -1.0
-
+        
+    
+    charge_efficiency = 0.9
     alpha_upper = 0.95/0.3
     alpha_lower = 0.05/0.2
     
@@ -73,13 +75,13 @@ def battery_power(delta_freq, service_power, max_discharge_rate=5, max_charge_ra
     return battery_charge
 
 
-def add_charge_info(input_df, service_power, delta_time=1):
+def add_charge_info(input_df, service_power):
 
     df = input_df.copy()
     
     df["battery_charge_percent"] = [battery_power(dfi, service_power) for dfi in df["delta_freq"]]
     df["battery_charge"] = service_power * df["battery_charge_percent"]
-    df['culm_charge'] = df["battery_charge"].cumsum() * delta_time/3600.0
+    df['culm_charge'] = df["battery_charge"].cumsum()/3600.0
     
     return df
 
@@ -224,7 +226,7 @@ def generate_sample_df(pdf, bin_cents, num_samps):
     return our_samps
 
 
-def temporal_covariance(input_df, max_sep=None, step=100, verbose=True):
+def temporal_covariance(input_df, max_sep=None, step=100):
 
     df = input_df.copy()
     
@@ -239,26 +241,14 @@ def temporal_covariance(input_df, max_sep=None, step=100, verbose=True):
         num = max_sep
     else:
         num = len(deltas)-1
-
-    if verbose:
     
-        for i in tqdm(range(0, num, step)):
+    for i in tqdm(range(0, num, step)):
         
-            if not i % step:
-                cov[i] = deltas.cov().iloc[0,1]
-            
-                deltas["shift_freq"] = deltas["shift_freq"].shift(step)
-                deltas = deltas.iloc[step:]
-
-    else:
+        if not i % step:
+            cov[i] = deltas.cov().iloc[0,1]
         
-        for i in range(0, num, step):
-            
-            if not i % step:
-                cov[i] = deltas.cov().iloc[0,1]
-            
-                deltas["shift_freq"] = deltas["shift_freq"].shift(step)
-                deltas = deltas.iloc[step:]
+            deltas["shift_freq"] = deltas["shift_freq"].shift(step)
+            deltas = deltas.iloc[step:]
         
     return cov
 
@@ -308,20 +298,5 @@ def interp_samples(samples, max_time, step_samples):
         new_samples.append(interp(new_times))
         
     return new_samples
-
-
-def create_continuous_timeseries(input_df):
-
-    df = input_df.dropna()
-
-    df.index = np.arange(len(df))
-
-    drops = [i for i in range(698400, 698400 + 1 + 86400 - 72001)] + [i for i in range(842400, 842400 + 2 + 2*(86400 - 28801))]
-
-    df = df.drop(drops)
-
-    df.index = np.arange(len(df))
-
-    return df
 
 
