@@ -641,18 +641,18 @@ def loop_max_cap(reals, max_cap_arr, service_power, time_step, num_charge_steps,
             [service_power],
             max_cap=max_cap_arr[i],
             time_step=time_step,
-            min_charge_lim=max_cap_arr[i]*0.5,
-            max_charge_lim=max_cap_arr[i]*0.75,
+            min_charge_lim=mc*0.5,
+            max_charge_lim=mc*0.75,
             num_charge_steps=num_charge_steps,
             service='both',
             poly_deg=poly_deg,
             verbose=False,
         )
 
-        results["best_charges"][i] = results_temp[service_power]["E_best"]
-        results["exp_dates"][i] = results_temp[service_power]["exp_date"]
-        results["lower_limits"][i] = results_temp[service_power]["date_lower"]
-        results["upper_limits"][i] = results_temp[service_power]["date_upper"]
+        results["best_charges"][i] = results_temp[sp]["E_best"]
+        results["exp_dates"][i] = results_temp[sp]["exp_date"]
+        results["lower_limits"][i] = results_temp[sp]["date_lower"]
+        results["upper_limits"][i] = results_temp[sp]["date_upper"]
 
     return results
         
