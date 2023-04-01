@@ -11,6 +11,7 @@ from scipy.interpolate import interp1d
 warnings.filterwarnings('ignore')
 from tqdm.notebook import tqdm
 from scipy.special import erf
+from scipy.stats import norm
 
 
 def probability_tails(x1, x2):
@@ -20,8 +21,8 @@ def probability_tails(x1, x2):
 
 def hist_fit_2gauss(x, bin_cents, hist):
     
-    gauss1 = normal_dist(bin_cents, x[1], mu=-x[0])
-    gauss2 = normal_dist(bin_cents, x[1], mu=x[0])
+    gauss1 = norm.pdf(bin_cents, -x[0], x[1])
+    gauss2 = norm.pdf(bin_cents, x[0], x[1])
     
     gauss = np.where(bin_cents<0, gauss1, gauss2)
     gauss = gauss / np.trapz(gauss, bin_cents)
@@ -31,7 +32,7 @@ def hist_fit_2gauss(x, bin_cents, hist):
 
 def hist_fit_gauss(x, bin_cents, hist):
     
-    gauss = normal_dist(bin_cents, x[1], mu=x[0])
+    gauss = norm.pdf(bin_cents, x[0], x[1])
     gauss = gauss / np.trapz(gauss, bin_cents)
     
     return gauss-hist
@@ -187,11 +188,6 @@ def fill_in_spectra(input_df, sim):
     return df
 
 
-def normal_dist(x, sigma, mu=0):
-    
-    return np.exp(-0.5 * (np.abs(x-mu)**2.0 / sigma**2.0)) / (np.sqrt(2.0 * np.pi) * sigma)
-
-
 def calc_gaussian_slope(
         sigma,
         service_power,
@@ -216,7 +212,7 @@ def calc_gaussian_slope(
     
     charge = np.trapz(
         (
-            normal_dist(delta_freq, sigma) * y
+            norm.pdf(delta_freq, 0.0, sigma) * y
         ),
         delta_freq
     )
@@ -360,7 +356,7 @@ def square_cov(cov, max_time, time_step=1):
     
     cov_arr = np.zeros([len(times), len(times)])
     
-    cov_arr[:] = cov_interp(times)
+    cov_arr[:] = np.where(times <= np.max(list(cov.keys())), cov_interp(times), 0.0)
     
     for i in range(len(times)):
         cov_arr[i] = np.roll(cov_arr[i], i)
@@ -436,7 +432,7 @@ def simulations_for_anaylsis(
 
         print(f"creating simulation for service power {p}")
     
-        samples = simulate_grf_using_cov(real_space_cov, max_time=10800, time_step=time_step, num_samples=num_samples)
+        samples = simulate_grf_using_cov(real_space_cov, max_time=block_length, time_step=time_step, num_samples=num_samples)
     
         new_samples = [s.flatten() for s in samples]
     
@@ -536,7 +532,7 @@ def find_E0_for_max_time(
 
     res = np.polyfit(E_arr, d_mean, deg=poly_deg)
 
-    Ebest = E_arr[np.where(np.poly1d(res)(E_arr)==np.max(np.poly1d(res)(E_arr)))[0]]
+    Ebest = E_arr[np.where(np.poly1d(res)(E_arr)==np.max(np.poly1d(res)(E_arr)))[0]][0]
 
     return Ebest, d_mean, E_arr
 
@@ -582,11 +578,11 @@ def service_power_loop(
             
         elif service=='high':
             
-            E_best = [0]
+            E_best = 0
             
         elif service=='low':
             
-            E_best = [max_cap]
+            E_best = max_cap
             
         dates = max_date_func(E_best, reals, p, max_cap, service)*time_step /(3600.0 * 24.0)
 
@@ -608,7 +604,7 @@ def service_power_loop(
             print(f"\tThe {100*fit_conf}% confidence interval is {np.round(sig_lower, 2)} - {np.round(sig_upper, 2)} days")
             print(f"\tWith initial charge = {E_best[0]} MWh")
 
-        E_best_list.append(E_best[0])
+        E_best_list.append(E_best)
         dates_list.append("%s days " % (np.round(results[p]["exp_date"],2)))
         conf_list.append("%s - %s days" %(np.round(results[p]["date_lower"], 2), np.round(results[p]["date_upper"], 2)))
         service_list.append("%sMW - %s" % (p, service))
@@ -626,7 +622,16 @@ def service_power_loop(
     return results
 
 
-def loop_max_cap(reals, max_cap_arr, service_power, time_step, num_charge_steps, service="both", poly_deg=8):
+def loop_max_cap(
+        reals,
+        max_cap_arr,
+        service_power,
+        time_step,
+        num_charge_steps,
+        service="both",
+        poly_deg=8,
+        fit_conf=0.95
+):
 
     results = {}
     results["best_charges"] = np.zeros(len(max_cap_arr))
@@ -644,8 +649,9 @@ def loop_max_cap(reals, max_cap_arr, service_power, time_step, num_charge_steps,
             min_charge_lim=max_cap_arr[i]*0.5,
             max_charge_lim=max_cap_arr[i]*0.75,
             num_charge_steps=num_charge_steps,
-            service='both',
+            service=service,
             poly_deg=poly_deg,
+            fit_conf=fit_conf,
             verbose=False,
         )
 
