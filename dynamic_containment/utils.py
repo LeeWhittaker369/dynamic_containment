@@ -15,11 +15,35 @@ from scipy.stats import norm
 
 
 def probability_tails(x1, x2):
+    """The probablity that a value lands outside of two values
+    of a normal distribution.
+
+    Args:
+        x1: The lower value, provided as the ratio x/sigma.
+        x2: The upper value, provided as the ratio x/sigma
+
+    Returns:
+        The probability.
+
+    """
 
     return 0.5 * erf(x1/np.sqrt(2)) + 0.5 * erf(x2/np.sqrt(2))
 
 
 def hist_fit_2gauss(x, bin_cents, hist):
+    """Creates an array of residuals between frequency model
+       from two normal distribution joined together and a histogram.
+
+    Args:
+        x1: The position of peak of each normal distribution on
+            either side of zero.
+        bin_cents: The centres of each bin
+        hist: The 
+
+    Returns:
+        The residuals.
+
+    """
     
     gauss1 = norm.pdf(bin_cents, -x[0], x[1])
     gauss2 = norm.pdf(bin_cents, x[0], x[1])
@@ -31,16 +55,24 @@ def hist_fit_2gauss(x, bin_cents, hist):
 
 
 def hist_fit_gauss(x, bin_cents, hist):
+    """Creates an array of residuals between frequency model
+       from a normal distribution and a histogram.
+
+    Args:
+        x: The position of peak of each normal distribution on
+            either side of zero.
+        bin_cents: The centres of each bin
+        hist: The 
+
+    Returns:
+        The residuals.
+
+    """
     
     gauss = norm.pdf(bin_cents, x[0], x[1])
     gauss = gauss / np.trapz(gauss, bin_cents)
     
     return gauss-hist
-
-
-def extract_time_block(min_t, max_t, table):
-    
-    return table.query("date>=@min_t & date<=@max_t")
 
 
 def battery_power(
@@ -51,6 +83,21 @@ def battery_power(
         charge_efficiency=0.9,
         max_cap=4
 ):
+    """The model of how battery charge responds to frequncy changes.
+
+    Args:
+        delta_freq: frequency-50 Hz.
+        service_power: The contracted service power 
+        max_discharge_rate: The maximum discharge rate of the battery (MW)
+        max_charge_rate: The maximum charge rate of the battery (MW)
+        charge_efficiency: The efficiency of the battery when charging
+        max_cap: The maximum capacity of the battery (MWh) 
+
+    Returns:
+        The change in charge of the batter caused by a response
+        to the frequency (MW).
+
+    """
     
     max_percent = max_charge_rate / service_power
     min_percent = -max_discharge_rate / service_power
@@ -96,6 +143,22 @@ def add_charge_info(
         charge_efficiency=0.9,
         max_cap=4
 ):
+    """Adds the temporal cumulative charge information to a dataframe.
+
+    Args:
+        input dataframe: A data frame containing delta_freq.
+        service_power: The contracted service power
+        delta_time: The size of the time step (could be removed by using the date column)
+        max_discharge_rate: The maximum discharge rate of the battery (MW)
+        max_charge_rate: The maximum charge rate of the battery (MW)
+        charge_efficiency: The efficiency of the battery when charging
+        max_cap: The maximum capacity of the battery (MWh) 
+
+    Returns:
+        The change in charge of the batter caused by a response
+        to the frequency (MW).
+
+    """
 
     df = input_df.copy()
     
@@ -120,6 +183,15 @@ def add_charge_info(
 
 
 def read_and_clean(path='data/task_data_1hz.csv.gz'):
+    """Reads in the example data and changes the column names.
+
+    Args:
+        input dataframe: Path to the data.
+
+    Returns:
+        The example frequency data
+
+    """
     
     freq_table = pd.read_csv(path)
     freq_table = freq_table.rename(
@@ -135,6 +207,16 @@ def read_and_clean(path='data/task_data_1hz.csv.gz'):
 
 
 def spectral_power(df, fs=1):
+    """Calculates the specral density of a time series.
+
+    Args:
+        df: The input dataframe.
+        fs: sampling frequency
+
+    Returns:
+        The spectra density
+
+    """
     
     x, power = signal.welch(df.delta_freq, fs=fs)
     
@@ -142,6 +224,15 @@ def spectral_power(df, fs=1):
 
 
 def simulate_delta_f(delta_f):
+    """Uses the spectra density to create Gaussian random simulations.
+
+    Args:
+        delta_f: The delta_f data.
+
+    Returns:
+        The simulated datasets
+
+    """
     
     x, power = spectral_power(delta_f, fs=1)
     
@@ -169,23 +260,6 @@ def simulate_delta_f(delta_f):
     process = ot.SpectralGaussianProcess(mySpectralModel, myTimeGrid)
     
     return process
-
-
-def fill_in_spectra(input_df, sim):
-
-    df = input_df.copy()
-    
-    sim = sim.rename({'delta_freq': 'sim_delta_freq'}, axis=1).drop('date', axis=1)
-    
-    if 'sim_delta_freq' in df.columns:
-        df = df.drop('sim_delta_freq', axis=1).merge(sim, left_index=True, right_index=True)
-    else:
-        df = df.merge(sim, left_index=True, right_index=True)
-    
-    df['filled_delta_freq'] = df['delta_freq']
-    df['filled_delta_freq'] = df['filled_delta_freq'].fillna(df['sim_delta_freq'])
-    
-    return df
 
 
 def calc_gaussian_slope(
