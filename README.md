@@ -9,4 +9,4 @@ The simulations are developed and road-tested in the `modelling_frequency_data`.
 
 The `dynamic_containment` module contains a `utils.py` file where the various functions used by the notebook live. Most of these functions have been developed within the `modelling_frequency_data` notebook.
 
-To run the notebooks, you first need to run `python -m pip install -e .`
+To run the notebooks, you first need to run `python -m pip install -e .` from the root directory. This will install all the requirements in `requirements.txt`
