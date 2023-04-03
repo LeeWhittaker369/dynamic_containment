@@ -270,6 +270,20 @@ def calc_gaussian_slope(
         charge_efficiency=0.9,
         max_cap=4
 ):
+    """Calculates the rate of change of charge assuming uncorrelated Gaussian noise.
+
+    Args:
+        sigma: The standard deviation of the noise.
+        service_power: The contracted service power
+        max_discharge_rate: The maximum discharge rate of the battery (MW)
+        max_charge_rate: The maximum charge rate of the battery (MW)
+        charge_efficiency: The efficiency of the battery when charging
+        max_cap: The maximum capacity of the battery (MWh) 
+
+    Returns:
+        The rate of change of charge
+
+    """
     
     delta_freq = np.linspace(-1.5, 1.5, num=200)
     y = np.array(
@@ -303,6 +317,21 @@ def calc_fitted_slope(
         charge_efficiency=0.9,
         max_cap=4
 ):
+    """Calculates the rate of change of energy given a binned pdf
+
+    Args:
+        pdf: The probablity density binned.
+        bin_cents: The bin centres
+        service_power: The contracted service power
+        max_discharge_rate: The maximum discharge rate of the battery (MW)
+        max_charge_rate: The maximum charge rate of the battery (MW)
+        charge_efficiency: The efficiency of the battery when charging
+        max_cap: The maximum capacity of the battery (MWh) 
+
+    Returns:
+        The rate of change of energy
+
+    """
     
     delta_freq = bin_cents#np.linspace(-1.5, 1.5, num=2000)
     y = np.array(
@@ -339,6 +368,20 @@ def calc_data_slope(
         charge_efficiency=0.9,
         max_cap=4
 ):
+    """Calculates the rate of change of energy given a dataframe with delta_freq
+
+    Args:
+        input_df: The input dataframe
+        service_power: The contracted service power
+        max_discharge_rate: The maximum discharge rate of the battery (MW)
+        max_charge_rate: The maximum charge rate of the battery (MW)
+        charge_efficiency: The efficiency of the battery when charging
+        max_cap: The maximum capacity of the battery (MWh) 
+
+    Returns:
+        The rate of change of energy
+
+    """
 
     df = input_df.copy()
     
@@ -369,7 +412,18 @@ def calc_data_slope(
     return charge * service_power / 3600
 
 
-def generate_sample_df(pdf, bin_cents, num_samps):
+def generate_sample_delta_f(pdf, bin_cents, num_samps):
+    """Genarates sample delta frequencies using a general pdf
+
+    Args:
+        pdf: The probablity density binned.
+        bin_cents: The bin centres
+        num_samps: Number of samples to generate
+
+    Returns:
+        Sample delta frequencies
+
+    """
     
     delta_bin = bin_cents[1]-bin_cents[0]
         
@@ -383,7 +437,19 @@ def generate_sample_df(pdf, bin_cents, num_samps):
     return our_samps
 
 
-def temporal_covariance(input_df, max_sep=None, step=100, verbose=True):
+def temporal_covariance(input_df, max_sep=None, step=100, verbose=True): 
+    """Calculates the temporal covariance
+
+    Args:
+        input_df: the dataframe with delta_freq
+        max: the maximum temporal separation (in number of rows in input_df)
+        step: The number of steps to sample at
+        verbose: Do you want a progress bar?
+
+    Returns:
+        The temporal covariance as a dict {Delta t : covariance}
+
+    """
 
     df = input_df.copy()
     
@@ -422,11 +488,22 @@ def temporal_covariance(input_df, max_sep=None, step=100, verbose=True):
     return cov
 
 
-def square_cov(cov, max_time, time_step=1):
+def square_cov(cov, max_sep, time_step=1):
+    """Turns the covariance from `temporal_covariance` into a square matrix
+
+    Args:
+        cov: A covariance dict
+        max_sep: the maximum temporal separation
+        time_step: The number of seconds to sample at
+
+    Returns:
+        The a square numpy array covariance matrix
+
+    """
     
     cov_interp = interp1d(list(cov.keys()), list(cov.values()), fill_value='extrapolate', kind='linear')
     
-    times = np.arange(0, max_time, time_step)
+    times = np.arange(0, max_sep, time_step)
     
     cov_arr = np.zeros([len(times), len(times)])
     
@@ -443,6 +520,19 @@ def square_cov(cov, max_time, time_step=1):
 
 
 def simulate_grf_using_cov(cov, max_time, time_step, num_samples, means=0):
+    """Generates a gaussian random set of random variables using a cov dict from `temporal_covariance`
+
+    Args:
+        cov: A covariance dict
+        max_time: the maximum time to simulate to
+        time_step: The number of seconds to sample at
+        num_samples: The number of samples to generate
+        means: the mean of the samples
+
+    Returns:
+        An array of samples
+
+    """
     
     cov_arr = square_cov(cov, max_time, time_step=time_step)
     samples = np.random.multivariate_normal([means]*len(cov_arr[0]), cov_arr, size=num_samples)
@@ -450,23 +540,16 @@ def simulate_grf_using_cov(cov, max_time, time_step, num_samples, means=0):
     return samples
 
 
-def interp_samples(samples, max_time, step_samples):
-    
-    new_samples = []
-    
-    time_samples = np.arange(0, len(samples[0])) * step_samples
-    new_times = np.arange(0, max_time)
-    
-    for s in samples:
-        
-        interp = interp1d(time_samples, s, fill_value='extrapolate', kind='linear')
-        
-        new_samples.append(interp(new_times))
-        
-    return new_samples
-
-
 def create_continuous_timeseries(input_df):
+    """Creates a continuous time series. Note, the dates are hardcoded!
+
+    Args:
+        input_df: The input dataframe
+
+    Returns:
+        Dataframe with continuous timeseries
+
+    """
 
     df = input_df.dropna()
 
@@ -493,7 +576,27 @@ def simulations_for_anaylsis(
         charge_efficiency=0.9,
         max_cap=4
 ):
+    """Generates the simulated delta_freqs for an arbitrary number of realisations
 
+    Args:
+        real_space_cov: A covariance dict
+        service_powers: The contracted service powers as an array
+        nreals: The number of realisations
+        time_step: The time steps at which to generate samples
+        num_days: The number of days of data to simulate
+        block_length: The number of seconds to consider in independent blocks
+        max_discharge_rate: The maximum discharge rate of the battery (MW)
+        max_charge_rate: The maximum charge rate of the battery (MW)
+        charge_efficiency: The efficiency of the battery when charging
+        max_cap: The maximum capacity of the battery (MWh)
+
+    Returns:
+        A dictionary of summary statistics of the cumulative charge at each time step 
+            for each service power: mean, variance, and standard deviation
+        An dictionary containing the dataframes for each realisation for each service power
+
+    """
+    
     num_blocks = np.ceil(num_days * 24 * 3600 / float(block_length))
 
     reals = {}
@@ -509,8 +612,6 @@ def simulations_for_anaylsis(
         samples = simulate_grf_using_cov(real_space_cov, max_time=block_length, time_step=time_step, num_samples=num_samples)
     
         new_samples = [s.flatten() for s in samples]
-    
-        #new_samples = utils.interp_samples(samples, max_time=num_seconds, step_samples=time_step)
     
         count = 0
     
@@ -557,6 +658,20 @@ def simulations_for_anaylsis(
 
 
 def max_date_func(E0, reals, p, max_cap, service='both'):
+    """Finds the date at which the battery hits max energy or empty, given an inital energy and
+       set of simulated charge data
+
+    Args:
+        E0: The inital energy of the battery
+        reals: A dictionary of realisations from 'simulations_for_anaylsis'
+        p: The serive power
+        max_cap: The maximum capacity of the battery (MWh)
+        service: The flavour of service - 'both', 'high', or 'low'
+
+    Returns:
+        An array of dates for each realisation
+
+    """
     
     date_end = []
 
@@ -588,13 +703,32 @@ def find_E0_for_max_time(
         reals,
         p,
         max_cap,
-        min_charge_lim,
-        max_charge_lim,
-        num_charge_steps,
+        min_energy_lim,
+        max_energy_lim,
+        num_energy_steps,
         poly_deg
 ):
+    """Finds the initial energy that maximises the time taken to either
+       run out of energy or hit maximum capacity 
 
-    E_arr = np.linspace(min_charge_lim, max_charge_lim, num=num_charge_steps)
+    Args:
+        reals: A dictionary of realisations 'from simulations_for_anaylsis'
+        p: The service power
+        max_cap: The maximum capacity of the battery (MWh)
+        min_energy_lim: The lower limit of the initial energy to sample
+        max_energy_lim: The upper limit of the initial energy to sample
+        num_energy_steps: The number of steps to sample the energy between
+            min_energy_lim and max_energy_lim
+        poly_deg: The degree of polynomial to fit to the energy and lifetime
+
+    Returns:
+       The optimal initial energy
+       The mean termination date from the simulations
+       The array og initial energies sampled
+
+    """
+
+    E_arr = np.linspace(min_energy_lim, max_energy_lim, num=num_energy_steps)
 
     d_mean = []
     
@@ -616,14 +750,37 @@ def service_power_loop(
         service_powers,
         max_cap,
         time_step,
-        min_charge_lim,
-        max_charge_lim,
-        num_charge_steps,
+        min_energy_lim,
+        max_energy_lim,
+        num_energy_steps,
         service='both',
         poly_deg=8,
         fit_conf=0.95,
         verbose=True
 ):
+    """Loops through a list of service powers and finds the optimal initial energy in each case.
+       Also provides the confidence interval of the termination date with this initial energy
+
+    Args:
+        reals: A dictionary of realisations 'from simulations_for_anaylsis'
+        service_power: The contracted service powers as an array
+        max_cap: The maximum capacity of the battery (MWh)
+        time_step: The time step of the simulations
+        min_energy_lim: The lower limit of the initial energy to sample
+        max_energy_lim: The upper limit of the initial energy to sample
+        num_energy_steps: The number of steps to sample the energy between
+            min_energy_lim and max_energy_lim
+        service: The flavour of service - 'both', 'high', or 'low'
+        poly_deg: The degree of polynomial to fit to the energy and lifetime
+        fit_conf: The confidence interval as a decimal - e.g. 0.95 for 95% confidence
+        verbose: If True, outputs summary statistics during run time
+
+    Returns:
+        A dictionary of results: For each service power, the output is the optimal initial energy,
+        the expected termination data and the confidence interval. Also, we output the full list of
+        termination dates for each realisation and a dataframe with the main results.
+
+    """
 
     results = {}
 
@@ -644,9 +801,9 @@ def service_power_loop(
                 reals,
                 p,
                 max_cap,
-                min_charge_lim,
-                max_charge_lim,
-                num_charge_steps,
+                min_energy_lim,
+                max_energy_lim,
+                num_energy_steps,
                 poly_deg
             )
             
@@ -676,7 +833,7 @@ def service_power_loop(
             print(f"For service power {p} MW")
             print(f"\tThe expected date of termination is {np.round(np.mean(dates), 2)} days")
             print(f"\tThe {100*fit_conf}% confidence interval is {np.round(sig_lower, 2)} - {np.round(sig_upper, 2)} days")
-            print(f"\tWith initial charge = {E_best[0]} MWh")
+            print(f"\tWith initial energy = {E_best[0]} MWh")
 
         E_best_list.append(E_best)
         dates_list.append("%s days " % (np.round(results[p]["exp_date"],2)))
@@ -684,7 +841,7 @@ def service_power_loop(
         service_list.append("%sMW - %s" % (p, service))
         
 
-    df["Initial Charge"] = E_best_list
+    df["Initial Energy / MWh"] = E_best_list
     df["Expected Termination Date"] = dates_list
     df["%s%% Confidence Interval" % (100*fit_conf)] = conf_list
 
@@ -701,14 +858,32 @@ def loop_max_cap(
         max_cap_arr,
         service_power,
         time_step,
-        num_charge_steps,
+        num_energy_steps,
         service="both",
         poly_deg=8,
         fit_conf=0.95
 ):
+    """Finds the optimal termination data and confidence limits for a given service power given an array of maximum capacities
 
+    Args:
+        reals: A dictionary of realisations 'from simulations_for_anaylsis'
+        max_cap_arr: An array of maximum capacities
+        service_power: The service power
+        time_step: The time step of the simulations
+        num_energy_steps: The number of steps to sample the energy between
+            min_energy_lim and max_energy_lim
+        service: The flavour of service - 'both', 'high', or 'low'
+        poly_deg: The degree of polynomial to fit to the energy and lifetime
+        fit_conf: The confidence interval as a decimal - e.g. 0.95 for 95% confidence
+
+    Returns:
+        A dictionay containing the optimal energies, the expected termination dates and the 
+        confidence limits
+
+    """
+    
     results = {}
-    results["best_charges"] = np.zeros(len(max_cap_arr))
+    results["best_energies"] = np.zeros(len(max_cap_arr))
     results["exp_dates"] = np.zeros(len(max_cap_arr))
     results["lower_limits"] = np.zeros(len(max_cap_arr))
     results["upper_limits"] = np.zeros(len(max_cap_arr))
@@ -720,16 +895,16 @@ def loop_max_cap(
             [service_power],
             max_cap=max_cap_arr[i],
             time_step=time_step,
-            min_charge_lim=max_cap_arr[i]*0.5,
-            max_charge_lim=max_cap_arr[i]*0.75,
-            num_charge_steps=num_charge_steps,
+            min_energy_lim=max_cap_arr[i]*0.5,
+            max_energy_lim=max_cap_arr[i]*0.75,
+            num_energy_steps=num_energy_steps,
             service=service,
             poly_deg=poly_deg,
             fit_conf=fit_conf,
             verbose=False,
         )
 
-        results["best_charges"][i] = results_temp[service_power]["E_best"]
+        results["best_energies"][i] = results_temp[service_power]["E_best"]
         results["exp_dates"][i] = results_temp[service_power]["exp_date"]
         results["lower_limits"][i] = results_temp[service_power]["date_lower"]
         results["upper_limits"][i] = results_temp[service_power]["date_upper"]
